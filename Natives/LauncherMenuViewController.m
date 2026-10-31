@@ -141,6 +141,7 @@
             [self displayProgress:nil];
         } else {
             [self enableJITWithAltKit];
+            [self watchForJITEnabled];
         }
     } else if (!NSProcessInfo.processInfo.macCatalystApp && !getenv("SIMULATOR_DEVICE_NAME")) {
         [self displayProgress:localize(@"login.jit.fail", nil)];
@@ -342,6 +343,26 @@
     } else {
         self.toolbarItems[1].title = status;
     }
+}
+
+// JIT can also be switched on from outside the app (StikDebug, SideStore, AltServer, Xcode...).
+// AltKit only reports its own result, so without this the "Checking for JIT" banner and its
+// spinner stayed on screen forever whenever JIT was enabled any other way, or never answered.
+- (void)watchForJITEnabled {
+    __weak LauncherMenuViewController *weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        while (!isJITEnabled(false)) {
+            [NSThread sleepForTimeInterval:0.5];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            LauncherMenuViewController *strongSelf = weakSelf;
+            if (strongSelf == nil) return;
+            NSLog(@"[JIT] JIT is now enabled");
+            [ALTServerManager.sharedManager stopDiscovering];
+            [strongSelf displayProgress:localize(@"login.jit.enabled", nil)];
+            [strongSelf displayProgress:nil];
+        });
+    });
 }
 
 - (void)enableJITWithAltKit {
